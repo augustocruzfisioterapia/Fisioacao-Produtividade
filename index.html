@@ -297,7 +297,7 @@
       error.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    form.addEventListener('submit', event => {
+    form.addEventListener('submit', async event => {
       event.preventDefault();
       error.classList.remove('show');
       const name = document.getElementById('professional').value.trim().replace(/\s+/g, ' ');
@@ -333,34 +333,15 @@
         quantity: Number(box.closest('.procedure').querySelector('.qty').value)
       }));
       const payload = { date: dateField.value, shift: shift.value, professional: name, procedures };
-      const frameName = `submission-frame-${Date.now()}`;
-      const iframe = document.createElement('iframe');
-      const transportForm = document.createElement('form');
-      const payloadField = document.createElement('input');
-      iframe.name = frameName;
-      iframe.hidden = true;
-      iframe.srcdoc = '<!doctype html><html><body></body></html>';
-      transportForm.method = 'POST';
-      transportForm.action = SCRIPT_URL;
-      transportForm.target = frameName;
-      transportForm.hidden = true;
-      payloadField.type = 'hidden';
-      payloadField.name = 'payload';
-      payloadField.value = JSON.stringify(payload);
-      transportForm.appendChild(payloadField);
 
-      let finished = false;
-      let submitted = false;
-      const cleanUp = () => {
-        window.removeEventListener('message', receiveResult);
-        iframe.remove();
-        transportForm.remove();
-      };
-      const finishSuccessfully = () => {
-        if (finished) return;
-        finished = true;
-        clearTimeout(timeout);
-        cleanUp();
+      try {
+        await fetch(SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+          body: new URLSearchParams({ payload: JSON.stringify(payload) })
+        });
         restoreSubmitButton();
         resetForm();
         toast.querySelector('strong').textContent = 'Registro enviado com sucesso!';
@@ -368,39 +349,10 @@
         toast.classList.add('show');
         setTimeout(() => toast.classList.remove('show'), 6000);
         window.scrollTo({ top: 0, behavior: 'smooth' });
-      };
-      const timeout = setTimeout(() => {
-        if (finished) return;
-        finished = true;
-        cleanUp();
+      } catch (networkError) {
         restoreSubmitButton();
-        showError('Não foi possível confirmar o registro. Verifique a conexão e tente novamente.');
-      }, 20000);
-      function receiveResult(event) {
-        if (event.source !== iframe.contentWindow || event.data?.source !== 'fisioacao-productivity') return;
-        if (finished) return;
-        if (!event.data.result?.ok) {
-          finished = true;
-          clearTimeout(timeout);
-          cleanUp();
-          restoreSubmitButton();
-          showError(event.data.result?.message || 'Não foi possível registrar. Tente novamente.');
-          return;
-        }
-        finishSuccessfully();
+        showError('Não foi possível enviar o registro. Verifique a conexão e tente novamente.');
       }
-      window.addEventListener('message', receiveResult);
-      iframe.addEventListener('load', () => {
-        if (!submitted) {
-          submitted = true;
-          transportForm.submit();
-          return;
-        }
-        // O Apps Script responde dentro de uma moldura intermediária do Google.
-        // O segundo carregamento confirma que o servidor recebeu e processou o envio.
-        setTimeout(finishSuccessfully, 500);
-      });
-      document.body.append(iframe, transportForm);
     });
 
     if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
