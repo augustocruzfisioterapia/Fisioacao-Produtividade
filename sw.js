@@ -1,4 +1,4 @@
-const CACHE = 'fisioacao-produtividade-v3';
+const CACHE = 'fisioacao-produtividade-v4';
 const FILES = ['./', './index.html', './manifest.webmanifest', './assets/logo-fisioacao.png', './assets/logo-emilio-ribas.png'];
 
 self.addEventListener('install', event => {
