@@ -152,7 +152,7 @@
           <h2>Identificação do plantão</h2>
           <p>Preencha os dados e informe apenas os procedimentos realizados.</p>
         </div>
-        <span class="demo-pill">PRÉVIA VISUAL</span>
+        <span class="demo-pill">FORMULÁRIO ONLINE</span>
       </div>
 
       <div class="error" id="form-error" role="alert"></div>
@@ -339,6 +339,7 @@
       const payloadField = document.createElement('input');
       iframe.name = frameName;
       iframe.hidden = true;
+      iframe.srcdoc = '<!doctype html><html><body></body></html>';
       transportForm.method = 'POST';
       transportForm.action = SCRIPT_URL;
       transportForm.target = frameName;
@@ -347,13 +348,26 @@
       payloadField.name = 'payload';
       payloadField.value = JSON.stringify(payload);
       transportForm.appendChild(payloadField);
-      document.body.append(iframe, transportForm);
 
       let finished = false;
+      let submitted = false;
       const cleanUp = () => {
         window.removeEventListener('message', receiveResult);
         iframe.remove();
         transportForm.remove();
+      };
+      const finishSuccessfully = () => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timeout);
+        cleanUp();
+        restoreSubmitButton();
+        resetForm();
+        toast.querySelector('strong').textContent = 'Registro enviado com sucesso!';
+        toast.querySelector('span').textContent = 'Os dados foram salvos na planilha. O formulário já pode ser preenchido novamente.';
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 6000);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       };
       const timeout = setTimeout(() => {
         if (finished) return;
@@ -365,21 +379,28 @@
       function receiveResult(event) {
         if (event.source !== iframe.contentWindow || event.data?.source !== 'fisioacao-productivity') return;
         if (finished) return;
-        finished = true;
-        clearTimeout(timeout);
-        cleanUp();
-        restoreSubmitButton();
         if (!event.data.result?.ok) {
+          finished = true;
+          clearTimeout(timeout);
+          cleanUp();
+          restoreSubmitButton();
           showError(event.data.result?.message || 'Não foi possível registrar. Tente novamente.');
           return;
         }
-        resetForm();
-        toast.classList.add('show');
-        setTimeout(() => toast.classList.remove('show'), 3800);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        finishSuccessfully();
       }
       window.addEventListener('message', receiveResult);
-      transportForm.submit();
+      iframe.addEventListener('load', () => {
+        if (!submitted) {
+          submitted = true;
+          transportForm.submit();
+          return;
+        }
+        // O Apps Script responde dentro de uma moldura intermediária do Google.
+        // O segundo carregamento confirma que o servidor recebeu e processou o envio.
+        setTimeout(finishSuccessfully, 500);
+      });
+      document.body.append(iframe, transportForm);
     });
 
     if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
