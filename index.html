@@ -1,3 +1,4 @@
+
 <!doctype html>
 <html lang="pt-BR">
 <head>
@@ -194,6 +195,8 @@
   </div>
 
   <script>
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyEtpWw6_hFLRKcBHZkgxNkJgNo7xtlYf2nJUKHyiIn5BtkL_OktgFJw65gV1J8dJZe/exec';
+
     const groups = [
       { code: 'FR', title: 'Fisioterapia Respiratória', open: true, items: [
         'Admissão/Triagem (novos casos)', 'Avaliação', 'Técnicas de Remoção de Secreções', 'Técnicas de Expansão Pulmonar',
@@ -269,6 +272,32 @@
     }
     setToday();
 
+    function resetForm() {
+      form.reset();
+      document.querySelectorAll('.procedure').forEach(row => row.classList.remove('active'));
+      document.querySelectorAll('.qty').forEach(qty => {
+        qty.disabled = true;
+        qty.required = false;
+        qty.value = '';
+      });
+      document.querySelectorAll('details').forEach((details, index) => {
+        details.open = index === 0;
+        updateCount(details);
+      });
+      setToday();
+    }
+
+    function restoreSubmitButton() {
+      submit.disabled = false;
+      submit.textContent = 'Registrar Produtividade do Plantão';
+    }
+
+    function showError(message) {
+      error.textContent = message;
+      error.classList.add('show');
+      error.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
     form.addEventListener('submit', event => {
       event.preventDefault();
       error.classList.remove('show');
@@ -298,23 +327,63 @@
 
       submit.disabled = true;
       submit.textContent = 'Registrando…';
-      setTimeout(() => {
-        form.reset();
-        document.querySelectorAll('.procedure').forEach(row => row.classList.remove('active'));
-        document.querySelectorAll('.qty').forEach(qty => { qty.disabled = true; qty.required = false; qty.value = ''; });
-        document.querySelectorAll('details').forEach((details, index) => { details.open = index === 0; updateCount(details); });
-        setToday();
-        submit.disabled = false;
-        submit.textContent = 'Registrar Produtividade do Plantão';
+
+      const procedures = checked.map(box => ({
+        group: box.dataset.group,
+        name: box.value,
+        quantity: Number(box.closest('.procedure').querySelector('.qty').value)
+      }));
+      const payload = { date: dateField.value, shift: shift.value, professional: name, procedures };
+      const frameName = `submission-frame-${Date.now()}`;
+      const iframe = document.createElement('iframe');
+      const transportForm = document.createElement('form');
+      const payloadField = document.createElement('input');
+      iframe.name = frameName;
+      iframe.hidden = true;
+      transportForm.method = 'POST';
+      transportForm.action = SCRIPT_URL;
+      transportForm.target = frameName;
+      transportForm.hidden = true;
+      payloadField.type = 'hidden';
+      payloadField.name = 'payload';
+      payloadField.value = JSON.stringify(payload);
+      transportForm.appendChild(payloadField);
+      document.body.append(iframe, transportForm);
+
+      let finished = false;
+      const cleanUp = () => {
+        window.removeEventListener('message', receiveResult);
+        iframe.remove();
+        transportForm.remove();
+      };
+      const timeout = setTimeout(() => {
+        if (finished) return;
+        finished = true;
+        cleanUp();
+        restoreSubmitButton();
+        showError('Não foi possível confirmar o registro. Verifique a conexão e tente novamente.');
+      }, 20000);
+      function receiveResult(event) {
+        if (event.source !== iframe.contentWindow || event.data?.source !== 'fisioacao-productivity') return;
+        if (finished) return;
+        finished = true;
+        clearTimeout(timeout);
+        cleanUp();
+        restoreSubmitButton();
+        if (!event.data.result?.ok) {
+          showError(event.data.result?.message || 'Não foi possível registrar. Tente novamente.');
+          return;
+        }
+        resetForm();
         toast.classList.add('show');
         setTimeout(() => toast.classList.remove('show'), 3800);
         window.scrollTo({ top: 0, behavior: 'smooth' });
-      }, 650);
+      }
+      window.addEventListener('message', receiveResult);
+      transportForm.submit();
     });
 
     if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
   </script>
 </body>
 </html>
-index.html
-HTML
